@@ -53,6 +53,7 @@ I2C_HandleTypeDef hi2c1;
 TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
+DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 
@@ -84,8 +85,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) //interrupt from blue button
 
 uint32_t adcValue;
 uint32_t dataBank;
-uint32_t flipped;
-uint32_t result;
+float result;
+
 
 uint32_t bigEndian_uint32(uint32_t a)
 {
@@ -134,6 +135,8 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+  //ssd1306_Reset();
+  //ssd1306_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -146,11 +149,13 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  if (BeginRead == GPIO_PIN_SET)
 	  {
+
+
 		  htim2.Instance->CCR1 = 0;
 		  HAL_Delay(1000);
 		  htim2.Instance->CCR1 = 250;
 		  dataBank = 0.0;
-
+		  HAL_Delay(1000);
 		  for(int16_t i = 0; i<30; i++)
 		  {
 			  HAL_ADC_Start(&hadc1);
@@ -160,20 +165,22 @@ int main(void)
 			  }
 			  HAL_ADC_Stop(&hadc1);
 
-			  dataBank = dataBank + adcValue/255*10.0;
+			  dataBank = dataBank + adcValue/255*10;
 
 			  HAL_Delay(100);
 		  }
-		  result = dataBank/30.0;
+		  result = dataBank/30.0f;
+		  uint8_t data[42];
+		  uint16_t size = 0;
 
-		  flipped = bigEndian_uint32(result);
+		  size = sprintf((char*)&data, "Wynik pomiaru: %f mg/l\n", result);
 
+		  HAL_UART_Transmit_IT(&huart2, data, size);
 
-
-		  ssd1306_Init();
-		  ssd1306_SetCursor(10, 10);
-		  ssd1306_WriteString((char*)&flipped, Font_11x18, 1);
-		  ssd1306_UpdateScreen();
+		  //ssd1306_Init();
+		  //ssd1306_SetCursor(10, 10);
+		  //ssd1306_WriteString((char*)&flipped, Font_11x18, 1);
+		  //ssd1306_UpdateScreen();
 
 		  if(result < 0.25)
 		  {
@@ -411,7 +418,7 @@ static void MX_USART2_UART_Init(void)
   huart2.Init.Parity = UART_PARITY_NONE;
   huart2.Init.Mode = UART_MODE_TX_RX;
   huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_8;
   if (HAL_UART_Init(&huart2) != HAL_OK)
   {
     Error_Handler();
@@ -430,8 +437,12 @@ static void MX_DMA_Init(void)
 
   /* DMA controller clock enable */
   __HAL_RCC_DMA2_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
+  /* DMA1_Stream6_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
   /* DMA2_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
